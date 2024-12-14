@@ -47,7 +47,7 @@ void ppc_set_irq(PowerPCCPU *cpu, int irq, int level)
     unsigned int old_pending;
 
     /* We may already have the BQL if coming from the reset path */
-    QEMU_IOTHREAD_LOCK_GUARD();
+    BQL_LOCK_GUARD();
 
     old_pending = env->pending_interrupts;
 
@@ -267,7 +267,6 @@ static void power9_set_irq(void *opaque, int pin, int level)
         break;
     default:
         g_assert_not_reached();
-        return;
     }
 }
 
@@ -314,7 +313,7 @@ void store_40x_dbcr0(CPUPPCState *env, uint32_t val)
 {
     PowerPCCPU *cpu = env_archcpu(env);
 
-    qemu_mutex_lock_iothread();
+    bql_lock();
 
     switch ((val >> 28) & 0x3) {
     case 0x0:
@@ -334,7 +333,7 @@ void store_40x_dbcr0(CPUPPCState *env, uint32_t val)
         break;
     }
 
-    qemu_mutex_unlock_iothread();
+    bql_unlock();
 }
 
 /* PowerPC 40x internal IRQ controller */
@@ -633,6 +632,16 @@ void cpu_ppc_store_atbu (CPUPPCState *env, uint32_t value)
                      ((uint64_t)value << 32) | tb);
 }
 
+void cpu_ppc_increase_tb_by_offset(CPUPPCState *env, int64_t offset)
+{
+    env->tb_env->tb_offset += offset;
+}
+
+void cpu_ppc_decrease_tb_by_offset(CPUPPCState *env, int64_t offset)
+{
+    env->tb_env->tb_offset -= offset;
+}
+
 uint64_t cpu_ppc_load_vtb(CPUPPCState *env)
 {
     ppc_tb_t *tb_env = env->tb_env;
@@ -719,7 +728,9 @@ static inline int64_t __cpu_ppc_load_decr(CPUPPCState *env, int64_t now,
     int64_t decr;
 
     n = ns_to_tb(tb_env->decr_freq, now);
-    if (next > n && tb_env->flags & PPC_TIMER_BOOKE) {
+
+    /* BookE timers stop when reaching 0.  */
+    if (next < n && tb_env->flags & PPC_TIMER_BOOKE) {
         decr = 0;
     } else {
         decr = next - n;
@@ -738,7 +749,7 @@ static target_ulong _cpu_ppc_load_decr(CPUPPCState *env, int64_t now)
     decr = __cpu_ppc_load_decr(env, now, tb_env->decr_next);
 
     /*
-     * If large decrementer is enabled then the decrementer is signed extened
+     * If large decrementer is enabled then the decrementer is signed extended
      * to 64 bits, otherwise it is a 32 bit value.
      */
     if (env->spr[SPR_LPCR] & LPCR_LD) {
@@ -1066,7 +1077,7 @@ const VMStateDescription vmstate_ppc_timebase = {
     .version_id = 1,
     .minimum_version_id = 1,
     .pre_save = timebase_pre_save,
-    .fields      = (VMStateField []) {
+    .fields = (const VMStateField []) {
         VMSTATE_UINT64(guest_timebase, PPCTimebase),
         VMSTATE_INT64(time_of_the_day_ns, PPCTimebase),
         VMSTATE_END_OF_LIST()

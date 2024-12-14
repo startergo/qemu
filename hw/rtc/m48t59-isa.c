@@ -120,7 +120,7 @@ static void m48txx_isa_class_init(ObjectClass *klass, void *data)
     NvramClass *nc = NVRAM_CLASS(klass);
 
     dc->realize = m48t59_isa_realize;
-    dc->reset = m48t59_reset_isa;
+    device_class_set_legacy_reset(dc, m48t59_reset_isa);
     device_class_set_props(dc, m48t59_isa_properties);
     nc->read = m48txx_isa_read;
     nc->write = m48txx_isa_write;
@@ -161,7 +161,7 @@ static void m48t59_isa_register_types(void)
     for (i = 0; i < ARRAY_SIZE(m48txx_isa_info); i++) {
         isa_type_info.name = m48txx_isa_info[i].bus_name;
         isa_type_info.class_data = &m48txx_isa_info[i];
-        type_register(&isa_type_info);
+        type_register_static(&isa_type_info);
     }
 }
 
