@@ -28,6 +28,7 @@
 #include "sysemu/hw_accel.h"
 #include "monitor/monitor.h"
 #include "kvm/kvm_i386.h"
+#include "aehd/aehd_i386.h"
 #endif
 #include "qemu/log.h"
 #ifdef CONFIG_TCG

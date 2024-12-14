@@ -333,8 +333,6 @@ static inline void cpu_physical_memory_set_dirty_range(ram_addr_t start,
     xen_hvm_modified_memory(start, length);
 }
 
-#if !defined(_WIN32)
-
 /*
  * Contrary to cpu_physical_memory_sync_dirty_bitmap() this function returns
  * the number of dirty pages in @bitmap passed as argument. On the other hand,
