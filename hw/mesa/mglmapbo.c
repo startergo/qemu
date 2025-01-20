@@ -21,6 +21,7 @@
 #include "qemu/osdep.h"
 #include "mglfuncs.h"
 #include "mglmapbo.h"
+#include <glib.h>
 
 #if defined(__x86_64__)
 #include <nmmintrin.h>
@@ -44,21 +45,19 @@ typedef struct _syncobj {
 static PMAPBO pbufo = NULL;
 static PSYNCO psynco = NULL;
 
-void InitSyncObj(void) {
+void InitSyncObj(void)
+{
     PSYNCO p = psynco;
     while (p) {
         PSYNCO next = p->next;
         g_free(p);
         p = next;
     }
-    psynco = p;
+    psynco = NULL;
 }
 
-#ifdef __SSE4_2__
-#include <smmintrin.h>
-#endif
-
-uint32_t AddSyncObj(const uintptr_t sync) {
+uint32_t AddSyncObj(const uintptr_t sync)
+{
     PSYNCO p = psynco;
 
     if (!sync)
@@ -67,12 +66,11 @@ uint32_t AddSyncObj(const uintptr_t sync) {
     if (!p) {
         p = g_new0(SYNCO, 1);
         p->sync = sync;
-        p->g_sync = 0; // Initialize g_sync
-        #ifdef __SSE4_2__
-        p->g_sync = _mm_crc32_u64(p->g_sync, p->sync);
-        #else
-        // Alternative implementation if SSE4.2 is not supported
-        #endif
+#if defined(__x86_64__) || defined(__aarch64__)
+        p->g_sync = _mm_crc32_u64(0, p->sync);
+#else
+        p->g_sync = (p->sync & INT32_MAX);
+#endif
         psynco = p;
     } else {
         while (p->sync != sync && p->next)
@@ -81,15 +79,13 @@ uint32_t AddSyncObj(const uintptr_t sync) {
             p->next = g_new0(SYNCO, 1);
             p = p->next;
             p->sync = sync;
-            p->g_sync = 0; // Initialize g_sync
-            #ifdef __SSE4_2__
-            p->g_sync = _mm_crc32_u64(p->g_sync, p->sync);
-            #else
-            // Alternative implementation if SSE4.2 is not supported
-            #endif
+#if defined(__x86_64__) || defined(__aarch64__)
+            p->g_sync = _mm_crc32_u64(0, p->sync);
+#else
+            p->g_sync = (p->sync & INT32_MAX);
+#endif
         }
     }
-
     return p->g_sync;
 }
 
@@ -122,9 +118,9 @@ uintptr_t DeleteSyncObj(const uintptr_t sync)
             if (!q) {
                 q = p->next;
                 psynco = q;
-            }
-            else
+            } else {
                 q->next = p->next;
+            }
             g_free(p);
         }
     }
@@ -150,8 +146,7 @@ mapbufo_t *LookupBufObj(const int idx)
         p = g_new0(MAPBO, 1);
         p->bo.idx = idx;
         pbufo = p;
-    }
-    else {
+    } else {
         while ((idx != p->bo.idx) && p->next)
             p = p->next;
         if (idx != p->bo.idx) {
@@ -178,9 +173,9 @@ int FreeBufObj(const int idx)
             if (!prev) {
                 prev = curr->next;
                 pbufo = prev;
-            }
-            else
+            } else {
                 prev->next = curr->next;
+            }
             g_free(curr);
         }
     }
@@ -206,10 +201,10 @@ int MapBufObjGpa(mapbufo_t *bufo)
         uint32_t bufo_sz = ALIGNBO(bufo->mapsz) + (uint32_t)(bufo->hva & (qemu_real_host_page_size() - 1));
         while (bufo != &curr->bo) {
             uint32_t curr_sz = curr->bo.mapsz + (uint32_t)(curr->bo.hva & (qemu_real_host_page_size() - 1));
-            addr_lo = ((curr->bo.gpa & qemu_real_host_page_mask()) < addr_lo)?
-                (curr->bo.gpa & qemu_real_host_page_mask()):addr_lo;
-            addr_hi = (((curr->bo.gpa + curr_sz) & qemu_real_host_page_mask()) > addr_hi)?
-                ((curr->bo.gpa + curr_sz) & qemu_real_host_page_mask()):addr_hi;
+            addr_lo = ((curr->bo.gpa & qemu_real_host_page_mask()) < addr_lo) ?
+                (curr->bo.gpa & qemu_real_host_page_mask()) : addr_lo;
+            addr_hi = (((curr->bo.gpa + curr_sz) & qemu_real_host_page_mask()) > addr_hi) ?
+                ((curr->bo.gpa + curr_sz) & qemu_real_host_page_mask()) : addr_hi;
             curr = curr->next;
             ret++;
         }
@@ -223,4 +218,3 @@ int MapBufObjGpa(mapbufo_t *bufo)
     }
     return ret;
 }
-
