@@ -75,7 +75,7 @@ static void *hwnd;
 int glide_mapbufo(mapbufo_t *bufo, int add) { return 0; }
 #endif
 #ifdef CONFIG_LINUX
-#include "sysemu/kvm.h"
+#include "system/whpx.h"
 
 int glide_mapbufo(mapbufo_t *bufo, int add)
 {
