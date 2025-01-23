@@ -332,9 +332,9 @@ static void cwnd_mesagl(void *swnd, void *nwnd, void *opaque)
     window = (SDL_Window *)swnd;
 #ifdef CONFIG_DARWIN
     ctx[0] = SDL_GL_GetCurrentContext();
-#endif
-    qatomic_set(&wnd_ready, 1);
+#endif    
     DPRINTF("MESAGL window [SDL2 %p] ready", swnd);
+    qatomic_set(&wnd_ready, 1);
 }
 
 void SetMesaFuncPtr(void *p)
